@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 import os
 import ast  # For safer evaluation of coordinate strings
+from matplotlib.lines import Line2D  # For custom legend entries
 
 # Load the suburb coordinates
 coordinates_df = pd.read_csv('suburb_locations.csv')
@@ -37,7 +38,7 @@ frames = []
 cmap = plt.cm.Purples  # Using Purples colormap for a single color gradient
 
 # Define normalization based on positive spare capacity values for consistent coloring across frames
-positive_capacities = results_df[results_df['Spare Capacity (kW)'] >= 0]['Spare Capacity (kW)']
+positive_capacities = results_df[results_df['Spare Capacity (MW)'] >= 0]['Spare Capacity (MW)']
 if not positive_capacities.empty:
     min_positive_capacity = positive_capacities.min()
     max_positive_capacity = positive_capacities.max()
@@ -74,13 +75,13 @@ for year in years:
         continue  # Skip to the next year
 
     # Separate positive and negative spare capacities
-    positive_data = year_data[year_data['Spare Capacity (kW)'] >= 0]
-    negative_data = year_data[year_data['Spare Capacity (kW)'] < 0]
+    positive_data = year_data[year_data['Spare Capacity (MW)'] >= 0]
+    negative_data = year_data[year_data['Spare Capacity (MW)'] < 0]
 
     # Plot positive spare capacity
     if not positive_data.empty:
-        colors_positive = cmap(norm_positive(positive_data['Spare Capacity (kW)']))
-        sizes_positive = positive_data['Spare Capacity (kW)'] * size_scale
+        colors_positive = cmap(norm_positive(positive_data['Spare Capacity (MW)']))
+        sizes_positive = positive_data['Spare Capacity (MW)'] * size_scale
 
         # Plot scatter for positive spare capacity
         plt.scatter(
@@ -98,7 +99,7 @@ for year in years:
     if not negative_data.empty:
         # Assign bright red color for negative spare capacity
         colors_negative = ['red'] * len(negative_data)
-        sizes_negative = negative_data['Spare Capacity (kW)'].abs() * size_scale  # Use absolute values for sizing
+        sizes_negative = negative_data['Spare Capacity (MW)'].abs() * size_scale  # Use absolute values for sizing
 
         plt.scatter(
             [coord[0] for coord in negative_data['coordinates']],
@@ -112,20 +113,21 @@ for year in years:
         )
 
     # If the year is a single digit, add a leading zero to make it better in the gif
-    if year < 10:
-        year = f'0{year}'
-    plt.title(f'Spare Capacity in the Grid - Year {year}', fontsize=16)
+    display_year = f"{year:02}" if year < 10 else f"{year}"
+    plt.title(f'Spare Capacity in the Grid - Year {display_year}', fontsize=16)
     plt.axis('off')  # Hide axes
 
-    # Create the legend text as a running total for each suburb's spare capacity
-    # The numbers are actually in MW.
+    # Create the running total legend as a string
     running_total_legend = "\n".join(
-        [f"{row['District']} : {int(row['Spare Capacity (kW)'])} MW" for _, row in year_data.iterrows()]
+        [f"{row['District']} : {int(row['Spare Capacity (MW)'])} MW" for _, row in year_data.iterrows()]
     )
+    # Retrieve Overall Spare Capacity for the current year
+    overall_spare_capacity = results_df[results_df['Year'] == year]['Overall Spare Capacity (MW)'].values[0]
+    running_total_legend += f"\nOverall Spare Capacity: {int(overall_spare_capacity)} MW"
 
     # Add the running total legend in the bottom right corner
     plt.text(
-        x=map_image.size[0] - 600,
+        x=map_image.size[0] - 1100,
         y=map_image.size[1] - 100,
         s=running_total_legend,
         fontsize=10,
@@ -135,18 +137,32 @@ for year in years:
         bbox=dict(facecolor='black', alpha=0.6, boxstyle='round,pad=0.3')  # Background box for better visibility
     )
 
-    # Optionally, add a simple legend to differentiate positive and negative capacities
-    # This can help viewers quickly understand the color coding
-    # handles = []
-    # labels = []
-    # if not positive_data.empty:
-    #     handles.append(plt.scatter([], [], color=cmap(0.5), edgecolor='k', linewidth=0.5, alpha=0.7, s=100))
-    #     labels.append('Positive Spare Capacity')
-    # if not negative_data.empty:
-    #     handles.append(plt.scatter([], [], color='red', edgecolor='k', linewidth=0.5, alpha=0.7, s=100))
-    #     labels.append('Negative Spare Capacity')
-    # if handles:
-    #     plt.legend(handles, labels, loc='upper right', fontsize=10, framealpha=0.6)
+    # Create custom legend entries
+    handles = []
+    labels = []
+
+    if not positive_data.empty:
+        # Positive Spare Capacity handle
+        positive_handle = Line2D([], [], marker='o', color='w', markerfacecolor=cmap(0.5), markersize=10,
+                                  markeredgecolor='k', label='Positive Spare Capacity')
+        handles.append(positive_handle)
+        labels.append('Positive Spare Capacity')
+
+    if not negative_data.empty:
+        # Negative Spare Capacity handle
+        negative_handle = Line2D([], [], marker='o', color='w', markerfacecolor='red', markersize=10,
+                                  markeredgecolor='k', label='Negative Spare Capacity')
+        handles.append(negative_handle)
+        labels.append('Negative Spare Capacity')
+
+    # Overall Spare Capacity handle (using a star marker)
+    overall_handle = Line2D([], [], marker='*', color='gold', linestyle='None', markersize=15,
+                            markeredgecolor='k', label='Overall Spare Capacity')
+    handles.append(overall_handle)
+    labels.append('Overall Spare Capacity')
+
+    # Add the legend to the plot
+    # plt.legend(handles=handles, labels=labels, loc='upper right', fontsize=10, framealpha=0.6)
 
     # Save the current frame
     frame_filename = os.path.join(output_frames_path, f'frame_{year}.png')

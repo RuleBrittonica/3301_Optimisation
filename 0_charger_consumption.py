@@ -37,12 +37,12 @@ for year in years:
     year_data = year_data.merge(coordinates_df, left_on='District', right_on='suburb', how='left')
 
     # Get the maximum power consumption for normalization
-    max_power_consumption = year_data['Power Consumption from Chargers (kW)'].max()
+    max_power_consumption = year_data['Power Consumption from Chargers (MW)'].max()
 
     # Plot power consumption with normalized colors
     for i, row in year_data.iterrows():
         coords = row['coordinates']
-        power_consumption = row['Power Consumption from Chargers (kW)']
+        power_consumption = row['Power Consumption from Chargers (MW)']
 
         # Normalize the color intensity based on the power consumption
         normalized_intensity = power_consumption / max_power_consumption if max_power_consumption > 0 else 0
@@ -59,7 +59,7 @@ for year in years:
 
     # Create the legend text as a running total for each suburb
     running_total_legend = "\n".join(
-        [f"{row['District']} : {int(row['Power Consumption from Chargers (kW)'])} MW" for _, row in year_data.iterrows()]
+        [f"{row['District']} : {int(row['Power Consumption from Chargers (MW)'])} MW" for _, row in year_data.iterrows()]
     )
 
     # Add the running total legend in the bottom right corner
