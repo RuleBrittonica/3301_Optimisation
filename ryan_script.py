@@ -76,6 +76,11 @@ for year in range(years):
         district: power_year[i] + ev_charger_power_consumption[district] for i, district in enumerate(districts)
     }
 
+    # Calculate spare capacity in the grid
+    spare_capacity = {
+        district: max_power_limits[i] - total_power_consumption[district] for i, district in enumerate(districts)
+    }
+
     # Calculate buffer percentage (how close the total power is to 85% of the maximum power)
     buffer_percentage = [
         total_power_consumption[district] / max_power_limits[i] for i, district in enumerate(districts)
@@ -90,7 +95,8 @@ for year in range(years):
         'Total Power Consumption (kW)': [total_power_consumption[district] for district in districts],
         'Chargers Added This Year': [chargers_added[district] for district in districts],
         'Total Chargers Placed': [total_chargers_placed[district] for district in districts],
-        'Buffer': buffer_percentage
+        'Buffer': buffer_percentage,
+        'Spare Capacity (kW)': [spare_capacity[district] for district in districts]  # Add spare capacity
     })
 
 # Create a DataFrame for all results
@@ -105,7 +111,8 @@ for result in yearly_results:
         'Total Power Consumption (kW)': result['Total Power Consumption (kW)'],
         'Chargers Added This Year': result['Chargers Added This Year'],
         'Total Chargers Placed': result['Total Chargers Placed'],
-        'Buffer': result['Buffer']
+        'Buffer': result['Buffer'],
+        'Spare Capacity (kW)': result['Spare Capacity (kW)']  # Include spare capacity
     })
     all_results_df = pd.concat([all_results_df, year_df], ignore_index=True)
 
