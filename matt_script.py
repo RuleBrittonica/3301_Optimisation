@@ -16,8 +16,8 @@ safety_buffer = 0.90  # 90% of grid capacity
 
 # Rooftop Solar Data
 average_solar_per_person = 0.0044  # MW per person
-initial_solar_percentage = 15  # percent at Year 1
-final_solar_percentage = 50  # percent at Year 15
+initial_solar_percentage = 15 / 5  # percent at Year 1 (15% of population / 5 for the people in a household)
+final_solar_percentage = 40 / 5 # percent at Year 15 (50% of population / 5 for the people in a household)
 
 # Total Grid Capacity (without solar)
 total_grid_capacity = sum(max_power_limits)  # MW
