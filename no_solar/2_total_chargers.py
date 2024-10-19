@@ -15,7 +15,7 @@ print(results_df.head())
 print(coordinates_df.head())
 
 # Load the processed map image
-map_image_path = 'images/suburbs_processed.png'
+map_image_path = '../images/suburbs_processed.png'
 map_image = Image.open(map_image_path)
 
 # Prepare data for cumulative chargers
@@ -85,6 +85,8 @@ for year in years:
 
     # Append the frame to the list of frames
     frames.append(Image.open(frame_filename))
+
+frames = frames[0:11]
 
 # Create a GIF from the frames
 output_gif_path = 'chargers_growth.gif'
