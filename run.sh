@@ -2,7 +2,7 @@
 
 source ".venv/Scripts/activate"
 
-python -u "matt_script.py"
+python -u "optimisation.py"
 
 python -u "0_charger_consumption.py" &
 python -u "1_spare_capacity.py" &
