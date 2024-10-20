@@ -20,7 +20,7 @@ print("\nSuburb Coordinates Sample:")
 print(coordinates_df.head())
 
 # Load the processed map image
-map_image_path = 'images/suburbs_processed.png'
+map_image_path = '../images/suburbs_processed.png'
 map_image = Image.open(map_image_path)
 
 # Prepare data for spare capacity

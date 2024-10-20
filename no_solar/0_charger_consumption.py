@@ -11,7 +11,7 @@ coordinates_df['coordinates'] = coordinates_df['coordinates'].apply(lambda x: ev
 results_df = pd.read_csv('ev_charger_optimization_results.csv')
 
 # Load the processed map image
-map_image_path = 'images/suburbs_processed.png'
+map_image_path = '../images/suburbs_processed.png'
 map_image = Image.open(map_image_path)
 
 # Prepare data for power consumption

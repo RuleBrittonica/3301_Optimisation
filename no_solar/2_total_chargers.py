@@ -86,7 +86,6 @@ for year in years:
     # Append the frame to the list of frames
     frames.append(Image.open(frame_filename))
 
-frames = frames[0:11]
 
 # Create a GIF from the frames
 output_gif_path = 'chargers_growth.gif'

@@ -4,15 +4,49 @@ import numpy as np
 
 # Data Initialization
 districts = ['Belconnen', 'Nth CBR & City', 'CBR East', 'South CBR', 'Tugg', 'Gungahlin', 'Woden Valley']
-current_pop = [104000, 59500, 1495, 31234, 87941, 82118, 77536]
+current_pop = [104255, 59437, 1495, 31234, 87941, 82118, 77536]
 projected_pop = [140297, 90088, 1326, 36196, 88922, 86905, 138739]
-current_power_consumption = [109, 134, 17, 103, 133, 68, 77]  # MW
-projected_power_consumption = [169, 169, 21, 103, 151, 73, 124]  # MW
-max_power_limits = [226, 264, 54, 114, 219, 131, 150]  # MW
-ev_charger_power = 0.30  # MW per charger / charging station
-max_chargers_per_iteration = 50  # Maximum chargers that can be added per year
-years = 15
+current_power_consumption = [
+    max(109,121), # Belconnen
+    max(134,124), # Nth CBR & City
+    max(17,18), # CBR East
+    max(103,101), # South CBR
+    max(133,149), # Tugg
+    max(68,73), # Gungahlin
+    max(77,80) # Woden Valley
+]  # MW
+projected_power_consumption = [
+    max(169,192),  # Belconnen
+    max(169,181), # Nth CBR & City
+    max(21,21), # CBR East
+    max(103,108), # South CBR
+    max(151,153), # Tugg
+    max(73,71), # Gungahlin
+    max(124,156) # Woden Valley
+]  # MW
+max_power_limits = [
+    min(226,245), # Belconnen
+    min(264,312), # Nth CBR & City
+    min(54,54),  # CBR East
+    min(114,114), # South CBR
+    min(219,252), # Tugg
+    min(131,139), # Gungahlin
+    min(150,169)  # Woden Valley
+]  # MW
+ev_charger_power = 0.35  # MW per charger / charging station
+max_chargers_per_iteration = 60  # Maximum chargers that can be added per year
+years = 17
 safety_buffer = 0.90  # 90% of grid capacity
+
+min_power_limits = [
+    -min(48,50.8),   # Belconnen
+    -min(32.9,28.7), # Nth CBR & City
+    -min(54.4,56.5), # CBR East
+    -min(18.2,21.6), # South CBR
+    -min(18.4,37.7), # Tugg
+    -min(20.9,15.4), # Gungahlin
+    -min(32.7,38.4), # Woden Valley
+]
 
 # Rooftop Solar Data
 average_solar_per_person = 0.0044  # MW per person
@@ -96,6 +130,18 @@ for year in range(years):
         # Total Power Consumption in District = Baseline Power + Chargers Added * EV Charger Power
         district_consumption = power_year[i] + ev_charger_power * chargers_added[district]
         prob += district_consumption <= adjusted_max_limits[i], f"DistrictConsumptionConstraint_{district}_Year_{year+1}"
+
+    # 5. No District can recieve more than 25% of the total chargers added
+    for i, district in enumerate(districts):
+        prob += chargers_added[district] <= 0.25 * total_chargers_added, f"MaxChargersPerDistrict_{district}_Year_{year+1}"
+
+    # 6. No District can go below its minimum power limit (how much power can be
+    #    transferred from another district)
+    for i, district in enumerate(districts):
+        prob += district_consumption >= min_power_limits[i], f"MinPowerLimit_{district}_Year_{year+1}"
+
+    # Needed to get the model to solve correctly at the end
+    prob += chargers_added['CBR East'] <= 0.05 * total_chargers_added, f"CBR_East_Max_5_Percent_Year_{year+1}"
 
     # Solve the Linear Programming Problem
     prob.solve()

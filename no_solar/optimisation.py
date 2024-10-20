@@ -3,16 +3,51 @@ import pandas as pd
 import numpy as np
 
 # Data
+# Data Initialization
 districts = ['Belconnen', 'Nth CBR & City', 'CBR East', 'South CBR', 'Tugg', 'Gungahlin', 'Woden Valley']
-current_pop = [104000, 59500, 1495, 31234, 87941, 82118, 77536]
+current_pop = [104255, 59437, 1495, 31234, 87941, 82118, 77536]
 projected_pop = [140297, 90088, 1326, 36196, 88922, 86905, 138739]
-current_power_consumption = [109, 134, 17, 103, 133, 68, 77]  # MW
-projected_power_consumption = [169, 169, 21, 103, 151, 73, 124]  # MW
-max_power_limits = [226, 264, 54, 114, 219, 131, 150]  # MW
-ev_charger_power = 0.30  # MW per charger / charging station
-max_chargers_per_iteration = 50  # We can add up to 75 chargers per iteration
-years = 15
-safety_buffer = 0.90  # We need to ensure usage is not more than 90% of grid capacity
+current_power_consumption = [
+    max(109,121), # Belconnen
+    max(134,124), # Nth CBR & City
+    max(17,18), # CBR East
+    max(103,101), # South CBR
+    max(133,149), # Tugg
+    max(68,73), # Gungahlin
+    max(77,80) # Woden Valley
+]  # MW
+projected_power_consumption = [
+    max(169,192),  # Belconnen
+    max(169,181), # Nth CBR & City
+    max(21,21), # CBR East
+    max(103,108), # South CBR
+    max(151,153), # Tugg
+    max(73,71), # Gungahlin
+    max(124,156) # Woden Valley
+]  # MW
+max_power_limits = [
+    min(226,245), # Belconnen
+    min(264,312), # Nth CBR & City
+    min(54,54),  # CBR East
+    min(114,114), # South CBR
+    min(219,252), # Tugg
+    min(131,139), # Gungahlin
+    min(150,169)  # Woden Valley
+]  # MW
+ev_charger_power = 0.35  # MW per charger / charging station
+max_chargers_per_iteration = 60  # Maximum chargers that can be added per year
+years = 17
+safety_buffer = 0.90  # 90% of grid capacity
+
+min_power_limits = [
+    -min(48,50.8),   # Belconnen
+    -min(32.9,28.7), # Nth CBR & City
+    -min(54.4,56.5), # CBR East
+    -min(18.2,21.6), # South CBR
+    -min(18.4,37.7), # Tugg
+    -min(20.9,15.4), # Gungahlin
+    -min(32.7,38.4), # Woden Valley
+]
 
 # Total grid capacity (since suburbs can share power)
 total_grid_capacity = sum(max_power_limits)  # MW
@@ -38,39 +73,56 @@ for year in range(years):
     total_population = sum(population_year)
     total_baseline_power = sum(power_year)  # MW
 
-    # Create a LP problem instance for the current year
+    # Define the Linear Programming Problem
     prob = lp.LpProblem(f"EV_Charger_Placement_Year_{year+1}", lp.LpMaximize)
 
-    # Decision variables: Number of chargers added in each district (integer variables)
+    # Decision Variables: Number of Chargers Added in Each District
     chargers_added = lp.LpVariable.dicts(f"ChargersAdded_{year+1}", districts, lowBound=0, cat='Integer')
 
-    # Objective function: Maximize the total number of chargers added this iteration (up to 75)
+    # Objective Function: Maximize Total Chargers Added This Year (Up to max_chargers_per_iteration)
     total_chargers_added = lp.lpSum([chargers_added[district] for district in districts])
     prob += total_chargers_added, "MaximizeTotalChargersAdded"
 
     # Constraints:
 
-    # 1. Total chargers added per iteration should not exceed 75
+    # 1. Total Chargers Added Per Year Should Not Exceed max_chargers_per_iteration
     prob += total_chargers_added <= max_chargers_per_iteration, f"MaxChargersPerIteration_Year_{year+1}"
 
-    # 2. Cumulative power usage should not exceed 90% of the total grid capacity
-    # Total power consumption = baseline power + power from chargers (previous and current)
+    # 2. Cumulative Power Usage Should Not Exceed 90% of Total Adjusted Grid Capacity
+    # Total Power Consumption = Baseline Power + Power from Chargers (Previous and Current)
     cumulative_ev_charger_power = ev_charger_power * (previous_total_chargers_placed + total_chargers_added)
     cumulative_total_power_consumption = total_baseline_power + cumulative_ev_charger_power  # MW
 
     prob += cumulative_total_power_consumption <= safety_buffer * total_grid_capacity, f"CumulativePowerConstraint_Year_{year+1}"
 
-    # 3. Population-based proportionality constraint for charger distribution
-    # To avoid non-linear constraints, set a minimum number of chargers per district based on their population proportion and a fraction of the maximum chargers per iteration
+    # 3. Population-Based Proportionality Constraint for Charger Distribution
     for i, district in enumerate(districts):
         min_chargers = (population_year[i] / total_population) * max_chargers_per_iteration * 0.5  # 50% of proportional share
-        # Since chargers_added[district] is an integer, we need to set the minimum as an integer
-        # Use ceiling to ensure at least the minimum number is met
         min_chargers_int = int(np.ceil(min_chargers))
         prob += chargers_added[district] >= min_chargers_int, f"MinChargers_{district}_Year_{year+1}"
 
+    # 4. District Power Consumption Should Not Exceed Adjusted Max Power Limits
+    for i, district in enumerate(districts):
+        # Total Power Consumption in District = Baseline Power + Chargers Added * EV Charger Power
+        district_consumption = power_year[i] + ev_charger_power * chargers_added[district]
+        prob += district_consumption <= max_power_limits[i], f"DistrictConsumptionConstraint_{district}_Year_{year+1}"
+
+    # 5. No District can recieve more than 25% of the total chargers added
+    for i, district in enumerate(districts):
+        prob += chargers_added[district] <= 0.25 * total_chargers_added, f"MaxChargersPerDistrict_{district}_Year_{year+1}"
+
+    # 6. No District can go below its minimum power limit (how much power can be
+    #    transferred from another district)
+    for i, district in enumerate(districts):
+        prob += district_consumption >= min_power_limits[i], f"MinPowerLimit_{district}_Year_{year+1}"
+
+    # Needed to get the model to solve correctly at the end
+    prob += chargers_added['CBR East'] <= 0.05 * total_chargers_added, f"CBR_East_Max_5_Percent_Year_{year+1}"
+
     # Solve the problem
     prob.solve()
+
+    previous_ev_charger_power = ev_charger_power * previous_total_chargers_placed
 
     # Check if the solution is still optimal
     if lp.LpStatus[prob.status] != 'Optimal':
