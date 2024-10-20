@@ -24,7 +24,28 @@ projected_power_consumption = [
     max(73,71), # Gungahlin
     max(124,156) # Woden Valley
 ]  # MW
-max_power_limits = [
+projected_power_consumption = [
+    max(169,192),  # Belconnen
+    max(169,181), # Nth CBR & City
+    max(21,21), # CBR East
+    max(103,108), # South CBR
+    max(151,153), # Tugg
+    max(73,71), # Gungahlin
+    max(124,156) # Woden Valley
+]  # MW
+
+# Assuming that the Actual Power Limit is 80% of the 2 hour maximum
+current_power_limits = [
+    min(171,190) * 0.8, # Belconnen
+    min(209,257) * 0.8, # Nth CBR & City
+    min(54,54) * 0.8,  # CBR East
+    min(142,142) * 0.8, # South CBR
+    min(219,252) * 0.8, # Tugg
+    min(76,84) * 0.8, # Gungahlin
+    min(95,114) * 0.8, # Woden Valley
+] # MW
+
+future_power_limits = [
     min(226,245), # Belconnen
     min(264,312), # Nth CBR & City
     min(54,54),  # CBR East
@@ -53,9 +74,6 @@ average_solar_per_person = 0.0044  # MW per person
 initial_solar_percentage = 15 / 5  # percent at Year 1 (15% of population / 5 for the people in a household)
 final_solar_percentage = 40 / 5 # percent at Year 15 (50% of population / 5 for the people in a household)
 
-# Total Grid Capacity (without solar)
-total_grid_capacity = sum(max_power_limits)  # MW
-
 # Linear Interpolation Function
 def interpolate(start, end, years):
     return [start + (end - start) * year / (years - 1) for year in range(years)]
@@ -73,9 +91,15 @@ for year in range(years):
     power_year = interpolate(np.array(current_power_consumption), np.array(projected_power_consumption), years)[year]
     population_year = interpolate(np.array(current_pop), np.array(projected_pop), years)[year]
 
+    # Interpolate for available power capacity (without EV chargers)
+    max_power_limits = interpolate(np.array(current_power_limits), np.array(future_power_limits), years)[year]
+
     # Total Population and Baseline Power Consumption for the Current Year
     total_population = sum(population_year)
     total_baseline_power = sum(power_year)  # MW
+
+    # Total Grid Capacity (without solar)
+    total_grid_capacity = sum(max_power_limits)  # MW
 
     # Calculate Percentage of People with Rooftop Solar for the Current Year
     percentage_solar = interpolate(initial_solar_percentage, final_solar_percentage, years)[year] / 100.0  # Fraction

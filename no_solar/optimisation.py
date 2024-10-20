@@ -25,7 +25,19 @@ projected_power_consumption = [
     max(73,71), # Gungahlin
     max(124,156) # Woden Valley
 ]  # MW
-max_power_limits = [
+
+# Assuming that the Actual Power Limit is 80% of the 2 hour maximum
+current_power_limits = [
+    min(171,190) * 0.8, # Belconnen
+    min(209,257) * 0.8, # Nth CBR & City
+    min(54,54) * 0.8,  # CBR East
+    min(142,142) * 0.8, # South CBR
+    min(219,252) * 0.8, # Tugg
+    min(76,84) * 0.8, # Gungahlin
+    min(95,114) * 0.8, # Woden Valley
+] # MW
+
+future_power_limits = [
     min(226,245), # Belconnen
     min(264,312), # Nth CBR & City
     min(54,54),  # CBR East
@@ -34,6 +46,7 @@ max_power_limits = [
     min(131,139), # Gungahlin
     min(150,169)  # Woden Valley
 ]  # MW
+
 ev_charger_power = 0.35  # MW per charger / charging station
 max_chargers_per_iteration = 60  # Maximum chargers that can be added per year
 years = 17
@@ -48,9 +61,6 @@ min_power_limits = [
     -min(20.9,15.4), # Gungahlin
     -min(32.7,38.4), # Woden Valley
 ]
-
-# Total grid capacity (since suburbs can share power)
-total_grid_capacity = sum(max_power_limits)  # MW
 
 # Function to perform linear interpolation for power consumption over years
 def interpolate(start, end, years):
@@ -69,9 +79,15 @@ for year in range(years):
     power_year = interpolate(np.array(current_power_consumption), np.array(projected_power_consumption), years)[year]
     population_year = interpolate(np.array(current_pop), np.array(projected_pop), years)[year]
 
+    # Interpolate for available power capacity (without EV chargers)
+    max_power_limits = interpolate(np.array(current_power_limits), np.array(future_power_limits), years)[year]
+
     # Total population and baseline power consumption for the current year
     total_population = sum(population_year)
     total_baseline_power = sum(power_year)  # MW
+
+    # Total grid capacity (since suburbs can share power)
+    total_grid_capacity = sum(max_power_limits)  # MW
 
     # Define the Linear Programming Problem
     prob = lp.LpProblem(f"EV_Charger_Placement_Year_{year+1}", lp.LpMaximize)
@@ -152,6 +168,8 @@ for year in range(years):
     spare_capacity_district = {
         district: max_power_limits[i] - total_power_consumption_district[district] for i, district in enumerate(districts)
     }
+
+    print(spare_capacity_district)
 
     # Calculate cumulative total power consumption
     cumulative_ev_charger_power = ev_charger_power * previous_total_chargers_placed
