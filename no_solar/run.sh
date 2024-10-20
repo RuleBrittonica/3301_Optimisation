@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source ".venv/Scripts/activate"
+source "../.venv/Scripts/activate"
 
 python -u "optimisation.py"
 
@@ -15,7 +15,7 @@ wait $!
 rm -rf "output"
 mkdir "output"
 
-sleep 1
+sleep 2
 
 cp "chargers_growth.gif" "output/chargers_growth.gif"
 cp "spare_capacity_growth.gif" "output/spare_capacity_growth.gif"

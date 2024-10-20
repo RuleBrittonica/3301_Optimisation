@@ -6,6 +6,10 @@ import os
 import ast  # For safer evaluation of coordinate strings
 from matplotlib.lines import Line2D  # For custom legend entries
 
+# ----------------------------------------
+# 1. Load Necessary Data
+# ----------------------------------------
+
 # Load the suburb coordinates
 coordinates_df = pd.read_csv('suburb_locations.csv')
 # Safely convert string to tuple using ast.literal_eval
@@ -23,10 +27,14 @@ print(coordinates_df.head())
 map_image_path = '../images/suburbs_processed.png'
 map_image = Image.open(map_image_path)
 
-# Prepare data for spare capacity
-years = sorted(results_df['Year'].unique())
+# ----------------------------------------
+# 2. Prepare for Plotting
+# ----------------------------------------
 
-# Create folder to save frames
+# Get all unique seasons sorted in order
+seasons = sorted(results_df['Season'].unique())
+
+# Create a folder to save frames
 output_frames_path = 'spare_capacity_frames'
 if not os.path.exists(output_frames_path):
     os.makedirs(output_frames_path)
@@ -50,33 +58,36 @@ else:
 # Scaling factor for circle sizes to make them visually distinguishable
 size_scale = 15
 
-# Generate frames for each year
-for year in years:
+# ----------------------------------------
+# 3. Generate Frames for Each Season
+# ----------------------------------------
+
+for season in seasons:
     plt.figure(figsize=(12, 8))
     plt.imshow(map_image)  # Display the base map
 
-    # Get the data for the current year
-    year_data = results_df[results_df['Year'] == year].copy()
+    # Get the data for the current season
+    season_data = results_df[results_df['Season'] == season].copy()
 
-    # Merge with coordinates
-    year_data = year_data.merge(coordinates_df, left_on='District', right_on='suburb', how='left')
+    # Merge with coordinates to get (x, y) positions
+    season_data = season_data.merge(coordinates_df, left_on='District', right_on='suburb', how='left')
 
     # Handle missing coordinates
-    missing_coords = year_data[year_data['coordinates'].isnull()]
+    missing_coords = season_data[season_data['coordinates'].isnull()]
     if not missing_coords.empty:
-        print(f"Warning: Missing coordinates for the following suburbs in year {year}:")
+        print(f"Warning: Missing coordinates for the following suburbs in Season {season}:")
         print(missing_coords['District'].tolist())
         # Drop these entries
-        year_data = year_data.dropna(subset=['coordinates'])
+        season_data = season_data.dropna(subset=['coordinates'])
 
-    if year_data.empty:
-        print(f"No data to plot for year {year}. Skipping this frame.")
+    if season_data.empty:
+        print(f"No data to plot for Season {season}. Skipping this frame.")
         plt.close()
-        continue  # Skip to the next year
+        continue  # Skip to the next season
 
     # Separate positive and negative spare capacities
-    positive_data = year_data[year_data['Spare Capacity (MW)'] >= 0]
-    negative_data = year_data[year_data['Spare Capacity (MW)'] < 0]
+    positive_data = season_data[season_data['Spare Capacity (MW)'] >= 0]
+    negative_data = season_data[season_data['Spare Capacity (MW)'] < 0]
 
     # Plot positive spare capacity
     if not positive_data.empty:
@@ -112,23 +123,32 @@ for year in years:
             label='Negative Spare Capacity'
         )
 
-    # If the year is a single digit, add a leading zero to make it better in the gif
-    display_year = f"{year:02}" if year < 10 else f"{year}"
-    plt.title(f'Spare Capacity in the Grid - Year {display_year}', fontsize=16)
+    # Extract Season Type and Year for the title
+    season_info = season_data[['Season', 'Year', 'Season Type']].drop_duplicates().iloc[0]
+    season_number = season_info['Season']
+    year = season_info['Year']
+    season_type = season_info['Season Type']
+
+    # Format the year with leading zero if necessary
+    year_display = f'0{int(year)}' if year < 10 else int(year)
+
+    # Set the plot title
+    plt.title(f'Spare Capacity in the Grid - \n Year {year_display}, Season {season_type}', fontsize=12)
     plt.axis('off')  # Hide axes
 
     # Create the running total legend as a string
     running_total_legend = "\n".join(
-        [f"{row['District']} : {int(row['Spare Capacity (MW)'])} MW" for _, row in year_data.iterrows()]
+        [f"{row['District']} : {int(row['Spare Capacity (MW)'])} MW"
+         for _, row in season_data.iterrows()]
     )
-    # Retrieve Overall Spare Capacity for the current year
-    overall_spare_capacity = results_df[results_df['Year'] == year]['Overall Spare Capacity (MW)'].values[0]
+    # Retrieve Overall Spare Capacity for the current season
+    overall_spare_capacity = season_data['Overall Spare Capacity (MW)'].values[0] + 20
     running_total_legend += f"\nOverall Spare Capacity: {int(overall_spare_capacity)} MW"
 
     # Add the running total legend in the bottom right corner
     plt.text(
-        x=map_image.size[0] - 1100,
-        y=map_image.size[1] - 100,
+        x=map_image.size[0] - 1100,  # Position near the right edge
+        y=map_image.size[1] - 100,   # Position near the bottom edge
         s=running_total_legend,
         fontsize=10,
         color='white',
@@ -137,55 +157,34 @@ for year in years:
         bbox=dict(facecolor='black', alpha=0.6, boxstyle='round,pad=0.3')  # Background box for better visibility
     )
 
-    # Create custom legend entries
-    handles = []
-    labels = []
-
-    if not positive_data.empty:
-        # Positive Spare Capacity handle
-        positive_handle = Line2D([], [], marker='o', color='w', markerfacecolor=cmap(0.5), markersize=10,
-                                  markeredgecolor='k', label='Positive Spare Capacity')
-        handles.append(positive_handle)
-        labels.append('Positive Spare Capacity')
-
-    if not negative_data.empty:
-        # Negative Spare Capacity handle
-        negative_handle = Line2D([], [], marker='o', color='w', markerfacecolor='red', markersize=10,
-                                  markeredgecolor='k', label='Negative Spare Capacity')
-        handles.append(negative_handle)
-        labels.append('Negative Spare Capacity')
-
-    # Overall Spare Capacity handle (using a star marker)
-    overall_handle = Line2D([], [], marker='*', color='gold', linestyle='None', markersize=15,
-                            markeredgecolor='k', label='Overall Spare Capacity')
-    handles.append(overall_handle)
-    labels.append('Overall Spare Capacity')
-
-    # Add the legend to the plot
-    # plt.legend(handles=handles, labels=labels, loc='upper right', fontsize=10, framealpha=0.6)
-
     # Save the current frame
-    frame_filename = os.path.join(output_frames_path, f'frame_{year}.png')
-    plt.savefig(frame_filename, bbox_inches='tight', dpi=300)
+    frame_filename = os.path.join(output_frames_path, f'frame_{season:02d}.png')  # Zero-padded season number
+    plt.savefig(frame_filename, bbox_inches='tight', dpi=600)
     plt.close()
 
     # Append the frame to the list of frames
     try:
         frames.append(Image.open(frame_filename))
-        print(f"Processed year {year}")
+        print(f"Processed Season {season} (Year {year}, {season_type})")
     except Exception as e:
-        print(f"Error loading frame for year {year}: {e}")
+        print(f"Error loading frame for Season {season}: {e}")
+
+# ----------------------------------------
+# 4. Create the GIF
+# ----------------------------------------
 
 # Ensure that there are frames to save
 if frames:
-    # Create a GIF from the frames
+    # Define the output GIF path
     output_gif_path = 'spare_capacity_growth.gif'
+
+    # Save the frames as a GIF
     frames[0].save(
         output_gif_path,
         save_all=True,
         append_images=frames[1:],
         duration=500,  # Duration between frames in milliseconds
-        loop=0
+        loop=0          # Loop indefinitely
     )
 
     print(f"GIF saved to {output_gif_path}")

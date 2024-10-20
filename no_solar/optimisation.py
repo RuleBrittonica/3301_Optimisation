@@ -2,69 +2,45 @@ import pulp as lp
 import pandas as pd
 import numpy as np
 
-# Data
 # Data Initialization
 districts = ['Belconnen', 'Nth CBR & City', 'CBR East', 'South CBR', 'Tugg', 'Gungahlin', 'Woden Valley']
-current_pop = [104255, 59437, 1495, 31234, 87941, 82118, 77536]
-projected_pop = [140297, 90088, 1326, 36196, 88922, 86905, 138739]
-current_power_consumption = [
-    max(109,121), # Belconnen
-    max(134,124), # Nth CBR & City
-    max(17,18), # CBR East
-    max(103,101), # South CBR
-    max(133,149), # Tugg
-    max(68,73), # Gungahlin
-    max(77,80) # Woden Valley
-]  # MW
-projected_power_consumption = [
-    max(169,192),  # Belconnen
-    max(169,181), # Nth CBR & City
-    max(21,21), # CBR East
-    max(103,108), # South CBR
-    max(151,153), # Tugg
-    max(73,71), # Gungahlin
-    max(124,156) # Woden Valley
-]  # MW
 
-# Assuming that the Actual Power Limit is 80% of the 2 hour maximum
-current_power_limits = [
-    min(171,190) * 0.8, # Belconnen
-    min(209,257) * 0.8, # Nth CBR & City
-    min(54,54) * 0.8,  # CBR East
-    min(142,142) * 0.8, # South CBR
-    min(219,252) * 0.8, # Tugg
-    min(76,84) * 0.8, # Gungahlin
-    min(95,114) * 0.8, # Woden Valley
-] # MW
+# Population Data
+current_pop = np.array([104255, 59437, 1495, 31234, 87941, 82118, 77536])
+projected_pop = np.array([140297, 90088, 1326, 36196, 88922, 86905, 138739])
 
-future_power_limits = [
-    min(226,245), # Belconnen
-    min(264,312), # Nth CBR & City
-    min(54,54),  # CBR East
-    min(114,114), # South CBR
-    min(219,252), # Tugg
-    min(131,139), # Gungahlin
-    min(150,169)  # Woden Valley
-]  # MW
+# Power Consumption Data (Summer and Winter)
+current_power_consumption_summer = np.array([109, 134, 17, 103, 133, 68, 77])  # MW
+current_power_consumption_winter = np.array([121, 124, 18, 101, 149, 73, 80])  # MW
 
+projected_power_consumption_summer = np.array([169, 169, 21, 103, 151, 73, 124])  # MW
+projected_power_consumption_winter = np.array([192, 181, 21, 108, 153, 71, 156])  # MW
+
+# Power Limits Data (Summer and Winter)
+current_power_limits_summer = np.array([171, 209, 54, 142, 219, 76, 95]) * 0.8  # MW
+current_power_limits_winter = np.array([190, 257, 54, 142, 252, 84, 114]) * 0.8  # MW
+
+future_power_limits_summer = np.array([226, 264, 54, 114, 219, 131, 150])  # MW
+future_power_limits_winter = np.array([245, 312, 54, 114, 252, 139, 169])  # MW
+
+# Minimum Power Limits Data (Summer and Winter)
+min_power_limits_summer = -np.array([48, 32.9, 54.4, 18.2, 18.4, 20.9, 32.7])
+min_power_limits_winter = -np.array([50.8, 28.7, 56.5, 21.6, 37.7, 15.4, 38.4])
+
+# EV Charger Data
 ev_charger_power = 0.35  # MW per charger / charging station
-max_chargers_per_iteration = 60  # Maximum chargers that can be added per year
+max_chargers_per_iteration = 50  # Maximum chargers that can be added per year
+max_chargers_per_season = max_chargers_per_iteration / 2  # Chargers per season
 years = 17
+seasons = years * 2  # Total number of seasons
 safety_buffer = 0.90  # 90% of grid capacity
 
-min_power_limits = [
-    -min(48,50.8),   # Belconnen
-    -min(32.9,28.7), # Nth CBR & City
-    -min(54.4,56.5), # CBR East
-    -min(18.2,21.6), # South CBR
-    -min(18.4,37.7), # Tugg
-    -min(20.9,15.4), # Gungahlin
-    -min(32.7,38.4), # Woden Valley
-]
+# Function to perform linear interpolation over seasons
+def interpolate_over_seasons(start, end, total_seasons):
+    return [start + (end - start) * season / (total_seasons - 1) for season in range(total_seasons)]
 
-# Function to perform linear interpolation for power consumption over years
-def interpolate(start, end, years):
-    return [start + (end - start) * year / (years - 1) for year in range(years)]
+# Create a list to alternate between 'summer' and 'winter'
+season_types = ['summer' if i % 2 == 0 else 'winter' for i in range(seasons)]
 
 # Initialize storage for results and running tally of chargers placed in each district
 yearly_results = []
@@ -73,147 +49,174 @@ total_chargers_placed = {district: 0 for district in districts}
 # Running total of chargers placed across all districts
 previous_total_chargers_placed = 0
 
-# Loop through each year and perform optimization
-for year in range(years):
-    # Interpolate population-based power consumption (without EV chargers)
-    power_year = interpolate(np.array(current_power_consumption), np.array(projected_power_consumption), years)[year]
-    population_year = interpolate(np.array(current_pop), np.array(projected_pop), years)[year]
+for season in range(seasons):
+    # Determine if it's summer or winter
+    season_type = season_types[season]
 
-    # Interpolate for available power capacity (without EV chargers)
-    max_power_limits = interpolate(np.array(current_power_limits), np.array(future_power_limits), years)[year]
+    # Interpolate population for the current season
+    population_season = interpolate_over_seasons(current_pop, projected_pop, seasons)[season]
+    total_population = sum(population_season)
 
-    # Total population and baseline power consumption for the current year
-    total_population = sum(population_year)
-    total_baseline_power = sum(power_year)  # MW
+    # Interpolate baseline power consumption for the current season and the opposite season
+    if season_type == 'summer':
+        power_season_start = current_power_consumption_summer
+        power_season_end = projected_power_consumption_summer
+        power_limits_start = current_power_limits_summer
+        power_limits_end = future_power_limits_summer
+        min_power_limits = min_power_limits_summer
 
-    # Total grid capacity (since suburbs can share power)
+        # Get the opposite season's baseline power consumption
+        opposite_power_season_start = current_power_consumption_winter
+        opposite_power_season_end = projected_power_consumption_winter
+    else:
+        power_season_start = current_power_consumption_winter
+        power_season_end = projected_power_consumption_winter
+        power_limits_start = current_power_limits_winter
+        power_limits_end = future_power_limits_winter
+        min_power_limits = min_power_limits_winter
+
+        # Get the opposite season's baseline power consumption
+        opposite_power_season_start = current_power_consumption_summer
+        opposite_power_season_end = projected_power_consumption_summer
+
+    # Interpolate power consumption and power limits for the current season
+    power_season = interpolate_over_seasons(power_season_start, power_season_end, seasons)[season]
+    max_power_limits = interpolate_over_seasons(power_limits_start, power_limits_end, seasons)[season]
+
+    # Interpolate the opposite season's power consumption for the same season index
+    opposite_power_season = interpolate_over_seasons(opposite_power_season_start, opposite_power_season_end, seasons)[season]
+
+    # Calculate the maximum baseline consumption between current and opposite seasons
+    max_baseline_power = np.maximum(power_season, opposite_power_season)
+
+    # Total grid capacity
     total_grid_capacity = sum(max_power_limits)  # MW
 
+    # Total maximum baseline power consumption (used for cumulative constraint)
+    total_max_baseline_power = sum(max_baseline_power)  # MW
+
     # Define the Linear Programming Problem
-    prob = lp.LpProblem(f"EV_Charger_Placement_Year_{year+1}", lp.LpMaximize)
+    prob = lp.LpProblem(f"EV_Charger_Placement_Season_{season+1}", lp.LpMaximize)
 
     # Decision Variables: Number of Chargers Added in Each District
-    chargers_added = lp.LpVariable.dicts(f"ChargersAdded_{year+1}", districts, lowBound=0, cat='Integer')
+    chargers_added = lp.LpVariable.dicts(f"ChargersAdded_{season+1}", districts, lowBound=0, cat='Integer')
 
-    # Objective Function: Maximize Total Chargers Added This Year (Up to max_chargers_per_iteration)
+    # Objective Function: Maximize Total Chargers Added This Season (Up to max_chargers_per_season)
     total_chargers_added = lp.lpSum([chargers_added[district] for district in districts])
     prob += total_chargers_added, "MaximizeTotalChargersAdded"
 
     # Constraints:
 
-    # 1. Total Chargers Added Per Year Should Not Exceed max_chargers_per_iteration
-    prob += total_chargers_added <= max_chargers_per_iteration, f"MaxChargersPerIteration_Year_{year+1}"
+    # 1. Total Chargers Added Per Season Should Not Exceed max_chargers_per_season
+    prob += total_chargers_added <= max_chargers_per_season, f"MaxChargersPerSeason_Season_{season+1}"
 
-    # 2. Cumulative Power Usage Should Not Exceed 90% of Total Adjusted Grid Capacity
-    # Total Power Consumption = Baseline Power + Power from Chargers (Previous and Current)
+    # 2. Cumulative Power Usage Should Not Exceed 90% of Total Grid Capacity
+    # Total Max Power Consumption = Max Baseline Power + Power from Chargers (Previous and Current)
     cumulative_ev_charger_power = ev_charger_power * (previous_total_chargers_placed + total_chargers_added)
-    cumulative_total_power_consumption = total_baseline_power + cumulative_ev_charger_power  # MW
+    cumulative_total_max_power_consumption = total_max_baseline_power + cumulative_ev_charger_power  # MW
 
-    prob += cumulative_total_power_consumption <= safety_buffer * total_grid_capacity, f"CumulativePowerConstraint_Year_{year+1}"
+    prob += cumulative_total_max_power_consumption <= safety_buffer * total_grid_capacity, f"CumulativePowerConstraint_Season_{season+1}"
 
     # 3. Population-Based Proportionality Constraint for Charger Distribution
     for i, district in enumerate(districts):
-        min_chargers = (population_year[i] / total_population) * max_chargers_per_iteration * 0.5  # 50% of proportional share
+        min_chargers = (population_season[i] / total_population) * max_chargers_per_season * 0.5  # 50% of proportional share
         min_chargers_int = int(np.ceil(min_chargers))
-        prob += chargers_added[district] >= min_chargers_int, f"MinChargers_{district}_Year_{year+1}"
+        prob += chargers_added[district] >= min_chargers_int, f"MinChargers_{district}_Season_{season+1}"
 
-    # 4. District Power Consumption Should Not Exceed Adjusted Max Power Limits
+    # 5. No District can receive more than 35% of the total chargers added
     for i, district in enumerate(districts):
-        # Total Power Consumption in District = Baseline Power + Chargers Added * EV Charger Power
-        district_consumption = power_year[i] + ev_charger_power * chargers_added[district]
-        prob += district_consumption <= max_power_limits[i], f"DistrictConsumptionConstraint_{district}_Year_{year+1}"
+        prob += chargers_added[district] <= 0.35 * total_chargers_added, f"MaxChargersPerDistrict_{district}_Season_{season+1}"
 
-    # 5. No District can recieve more than 25% of the total chargers added
+    # 6. No District can go below its minimum power limit
     for i, district in enumerate(districts):
-        prob += chargers_added[district] <= 0.25 * total_chargers_added, f"MaxChargersPerDistrict_{district}_Year_{year+1}"
+        district_consumption = power_season[i] + ev_charger_power * (total_chargers_placed[district] + chargers_added[district])
+        prob += district_consumption >= min_power_limits[i], f"MinPowerLimit_{district}_Season_{season+1}"
 
-    # 6. No District can go below its minimum power limit (how much power can be
-    #    transferred from another district)
-    for i, district in enumerate(districts):
-        prob += district_consumption >= min_power_limits[i], f"MinPowerLimit_{district}_Year_{year+1}"
+    # 7. 'CBR East' receives at most 5% of the total chargers added
+    prob += chargers_added['CBR East'] <= 0.05 * total_chargers_added, f"CBR_East_Max_5_Percent_Season_{season+1}"
 
-    # Needed to get the model to solve correctly at the end
-    prob += chargers_added['CBR East'] <= 0.05 * total_chargers_added, f"CBR_East_Max_5_Percent_Year_{year+1}"
-
-    # Solve the problem
+    # Solve the Linear Programming Problem
     prob.solve()
 
-    previous_ev_charger_power = ev_charger_power * previous_total_chargers_placed
-
-    # Check if the solution is still optimal
+    # Check if the Solution is Optimal
     if lp.LpStatus[prob.status] != 'Optimal':
-        print(f"\nLinear program no longer optimal in Year {year+1}. Setting chargers added to zero for this and subsequent years.")
-        # From this year onwards, set chargers_added_year to zeros
-        chargers_added_year = {district: 0 for district in districts}
-        # Chargers placed remain the same
+        print(f"\nLinear program no longer optimal in Season {season+1}. Setting chargers added to zero for this and subsequent seasons.")
+        # From this season onwards, set chargers_added_season to zeros
+        chargers_added_season = {district: 0 for district in districts}
     else:
-        # Extract the results for the current year
-        chargers_added_year = {district: int(chargers_added[district].varValue) for district in districts}
-        # Update the running tally of total chargers placed in each district and overall
+        # Extract the Results for the Current Season
+        chargers_added_season = {district: int(lp.value(chargers_added[district])) for district in districts}
+        # Update the Running Tally of Total Chargers Placed in Each District
         for district in districts:
-            total_chargers_placed[district] += chargers_added_year[district]
-        previous_total_chargers_placed += sum(chargers_added_year.values())
+            total_chargers_placed[district] += chargers_added_season[district]
+        # Update the Running Total of Chargers Placed Across All Districts
+        previous_total_chargers_placed += sum(chargers_added_season.values())
 
-    # Calculate power consumption for EV chargers placed up to the current year
-    ev_charger_power_consumption = {
-        district: (total_chargers_placed[district]) * ev_charger_power for district in districts
+    # Calculate Power Consumption for EV Chargers Placed Up to the Current Season
+    ev_charger_consumption = {
+        district: total_chargers_placed[district] * ev_charger_power for district in districts
     }
 
-    # Calculate total power consumption (baseline power + power from EV chargers)
-    total_power_consumption_district = {
-        district: power_year[i] + ev_charger_power_consumption[district] for i, district in enumerate(districts)
+    # Calculate Total Power Consumption per District
+    total_consumption_district = {
+        district: power_season[i] + ev_charger_consumption[district] for i, district in enumerate(districts)
     }
 
-    # Calculate spare capacity per district
+    # Calculate Spare Capacity per District
     spare_capacity_district = {
-        district: max_power_limits[i] - total_power_consumption_district[district] for i, district in enumerate(districts)
+        district: max_power_limits[i] - total_consumption_district[district] for i, district in enumerate(districts)
     }
 
-    print(spare_capacity_district)
+    # Calculate Cumulative Total Max Power Consumption
+    cumulative_total_max_power_consumption = total_max_baseline_power + sum(ev_charger_consumption.values())  # MW
 
-    # Calculate cumulative total power consumption
-    cumulative_ev_charger_power = ev_charger_power * previous_total_chargers_placed
-    cumulative_total_power_consumption = total_baseline_power + cumulative_ev_charger_power  # MW
-
-    # Calculate buffer percentage (how close the total power is to the 90% limit)
-    buffer_percentage = cumulative_total_power_consumption / (safety_buffer * total_grid_capacity)
+    # Calculate Buffer Percentage
+    buffer_percentage = cumulative_total_max_power_consumption / (safety_buffer * total_grid_capacity)
 
     # Calculate Overall Spare Capacity
-    overall_spare_capacity = (total_grid_capacity) - cumulative_total_power_consumption  # MW
+    overall_spare_capacity = (safety_buffer * total_grid_capacity) - cumulative_total_max_power_consumption  # MW
 
-    # Store results in the yearly_results list
+    # Calculate the Year (Season Number Divided by 2)
+    current_year = (season // 2) + 1
+
+    # Store Results
     yearly_results.append({
-        'Year': year + 1,
+        'Season': season + 1,
+        'Year': current_year,
+        'Season Type': season_type.capitalize(),
         'District': districts,
-        'Baseline Power Consumption (MW)': list(power_year),
-        'Power Consumption from Chargers (MW)': [ev_charger_power_consumption[district] for district in districts],
-        'Total Power Consumption (MW)': [total_power_consumption_district[district] for district in districts],
-        'Chargers Added This Year': [chargers_added_year[district] for district in districts],
+        'Baseline Power Consumption (MW)': list(power_season),
+        'Max Baseline Power Consumption (MW)': list(max_baseline_power),
+        'Power Consumption from Chargers (MW)': [ev_charger_consumption[district] for district in districts],
+        'Total Power Consumption (MW)': [total_consumption_district[district] for district in districts],
+        'Chargers Added This Season': [chargers_added_season[district] for district in districts],
         'Total Chargers Placed': [total_chargers_placed[district] for district in districts],
         'Spare Capacity (MW)': [spare_capacity_district[district] for district in districts],
-        'Cumulative Total Power Consumption (MW)': cumulative_total_power_consumption,
+        'Cumulative Total Power Consumption (MW)': cumulative_total_max_power_consumption,
         'Buffer Percentage': buffer_percentage,
-        'Overall Spare Capacity (MW)': overall_spare_capacity  # Added Overall Spare Capacity
+        'Overall Spare Capacity (MW)': overall_spare_capacity
     })
 
-# Create a DataFrame for all results
+# Create a DataFrame for All Results
 all_results_df = pd.DataFrame()
 
 for result in yearly_results:
-    year_df = pd.DataFrame({
-        'Year': result['Year'],
+    season_df = pd.DataFrame({
+        'Season': [result['Season']] * len(districts),
+        'Year': [result['Year']] * len(districts),
+        'Season Type': [result['Season Type']] * len(districts),
         'District': result['District'],
         'Baseline Power Consumption (MW)': result['Baseline Power Consumption (MW)'],
         'Power Consumption from Chargers (MW)': result['Power Consumption from Chargers (MW)'],
         'Total Power Consumption (MW)': result['Total Power Consumption (MW)'],
-        'Chargers Added This Year': result['Chargers Added This Year'],
+        'Chargers Added This Season': result['Chargers Added This Season'],
         'Total Chargers Placed': result['Total Chargers Placed'],
         'Spare Capacity (MW)': result['Spare Capacity (MW)'],
-        'Cumulative Total Power Consumption (MW)': result['Cumulative Total Power Consumption (MW)'],
-        'Buffer Percentage': result['Buffer Percentage'],
-        'Overall Spare Capacity (MW)': result['Overall Spare Capacity (MW)']  # Include Overall Spare Capacity
+        'Cumulative Total Power Consumption (MW)': [result['Cumulative Total Power Consumption (MW)']] * len(districts),
+        'Buffer Percentage': [result['Buffer Percentage']] * len(districts),
+        'Overall Spare Capacity (MW)': [result['Overall Spare Capacity (MW)']] * len(districts)
     })
-    all_results_df = pd.concat([all_results_df, year_df], ignore_index=True)
+    all_results_df = pd.concat([all_results_df, season_df], ignore_index=True)
 
 # Save to CSV
 csv_output_path = 'ev_charger_optimization_results.csv'  # Adjust the path as needed
