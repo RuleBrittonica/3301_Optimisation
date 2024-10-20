@@ -49,8 +49,12 @@ if not os.path.exists(MAP_IMAGE_PATH):
     raise FileNotFoundError(f"Map image not found at path: {MAP_IMAGE_PATH}")
 map_image = Image.open(MAP_IMAGE_PATH)
 
-# Prepare data for solar generation
-years = sorted(results_df['Year'].unique())
+# ----------------------------------------
+# 2. Prepare for Plotting
+# ----------------------------------------
+
+# Get all unique seasons sorted in order
+seasons = sorted(results_df['Season'].unique())
 
 # Create folder to save frames
 if not os.path.exists(OUTPUT_FRAMES_DIR):
@@ -59,49 +63,52 @@ if not os.path.exists(OUTPUT_FRAMES_DIR):
 # Create a list to store frames
 frames = []
 
-# Define normalization based on solar generation values for consistent sizing across frames
-solar_capacities = results_df['Solar Generation (MW)']
-if not solar_capacities.empty:
-    min_solar = solar_capacities.min()
-    max_solar = solar_capacities.max()
-    norm_solar = plt.Normalize(vmin=min_solar, vmax=max_solar)
+# ----------------------------------------
+# 3. Normalize Solar Generation Across All Seasons
+# ----------------------------------------
+
+# To maintain consistent size scaling across all frames, find the overall maximum solar generation
+overall_max_solar = results_df['Solar Generation (MW)'].max()
+
+# Define normalization based on overall maximum solar generation
+if overall_max_solar > 0:
+    norm_solar = plt.Normalize(vmin=0, vmax=overall_max_solar)
 else:
-    # Default normalization if there are no solar capacities
-    norm_solar = plt.Normalize(vmin=0, vmax=1)
+    norm_solar = plt.Normalize(vmin=0, vmax=1)  # Avoid division by zero
 
-# ---------------------------
-# Visualization Loop
-# ---------------------------
+# ----------------------------------------
+# 4. Generate Frames for Each Season
+# ----------------------------------------
 
-for year in years:
+for season in seasons:
     plt.figure(figsize=(12, 8))
     plt.imshow(map_image)  # Display the base map
 
-    # Get the data for the current year
-    year_data = results_df[results_df['Year'] == year].copy()
+    # Get the data for the current season
+    season_data = results_df[results_df['Season'] == season].copy()
 
-    # Merge with coordinates
-    year_data = year_data.merge(coordinates_df, left_on='District', right_on='suburb', how='left')
+    # Merge with coordinates to get (x, y) positions
+    season_data = season_data.merge(coordinates_df, left_on='District', right_on='suburb', how='left')
 
     # Handle missing coordinates
-    missing_coords = year_data[year_data['coordinates'].isnull()]
+    missing_coords = season_data[season_data['coordinates'].isnull()]
     if not missing_coords.empty:
-        print(f"Warning: Missing coordinates for the following districts in year {year}:")
+        print(f"Warning: Missing coordinates for the following districts in Season {season}:")
         print(missing_coords['District'].tolist())
         # Drop these entries
-        year_data = year_data.dropna(subset=['coordinates'])
+        season_data = season_data.dropna(subset=['coordinates'])
 
-    if year_data.empty:
-        print(f"No data to plot for year {year}. Skipping this frame.")
+    if season_data.empty:
+        print(f"No data to plot for Season {season}. Skipping this frame.")
         plt.close()
-        continue  # Skip to the next year
+        continue  # Skip to the next season
 
     # Extract solar generation data
-    solar_generation = year_data['Solar Generation (MW)']
-    coordinates = year_data['coordinates'].tolist()
+    solar_generation = season_data['Solar Generation (MW)']
+    coordinates = season_data['coordinates'].tolist()
 
     # Calculate sizes based on solar generation
-    sizes = solar_generation * SIZE_SCALE / max_solar if max_solar != 0 else solar_generation * SIZE_SCALE
+    sizes = solar_generation * SIZE_SCALE / overall_max_solar if overall_max_solar != 0 else solar_generation * SIZE_SCALE
 
     # Plot solar generation as yellow circles
     plt.scatter(
@@ -115,23 +122,33 @@ for year in years:
         label='Solar Generation'
     )
 
-    # Title
-    display_year = f"{year:02}" if year < 10 else f"{year}"
-    plt.title(f'Solar Generation in the Grid - Year {display_year}', fontsize=FONT_SIZE_TITLE)
+    # Extract Season Type and Year for the title
+    # Assuming 'Season Type' and 'Year' columns exist
+    season_info = season_data[['Season', 'Year', 'Season Type']].drop_duplicates().iloc[0]
+    season_number = season_info['Season']
+    year = season_info['Year']
+    season_type = season_info['Season Type']
+
+    # Format the year with leading zero if necessary
+    year_display = f"{int(year):02}" if int(year) < 10 else int(year)
+
+    # Set the plot title
+    plt.title(f'Solar Generation in the Grid -\nYear {year_display}, {season_type}', fontsize=FONT_SIZE_TITLE)
+
     plt.axis('off')  # Hide axes
 
     # Create the running total legend as a string
     running_total_legend = "\n".join(
-        [f"{row['District']} : {row['Solar Generation (MW)']:.2f} MW" for _, row in year_data.iterrows()]
+        [f"{row['District']} : {row['Solar Generation (MW)']:.2f} MW" for _, row in season_data.iterrows()]
     )
-    # Calculate Overall Solar Generation for the current year
+    # Calculate Overall Solar Generation for the current season
     overall_solar = solar_generation.sum()
     running_total_legend += f"\nOverall Solar Generation: {overall_solar:.2f} MW"
 
-    # Add the running total legend in the bottom right corner
+    # Add the running total legend in the bottom left corner
     plt.text(
-        x=map_image.size[0] - 1200,
-        y=map_image.size[1] - 100,
+        x=50,  # Position near the left edge
+        y=map_image.size[1] - 100,  # Position near the bottom edge
         s=running_total_legend,
         fontsize=FONT_SIZE_TEXT,
         color='white',
@@ -154,20 +171,20 @@ for year in years:
     # plt.legend(handles=handles, labels=labels, loc='upper right', fontsize=FONT_SIZE_LEGEND, framealpha=0.6)
 
     # Save the current frame
-    frame_filename = os.path.join(OUTPUT_FRAMES_DIR, f'frame_{year}.png')
-    plt.savefig(frame_filename, bbox_inches='tight', dpi=300)
+    frame_filename = os.path.join(OUTPUT_FRAMES_DIR, f'frame_{season:02d}.png')  # Zero-padded season number
+    plt.savefig(frame_filename, bbox_inches='tight', dpi=600)
     plt.close()
 
     # Append the frame to the list of frames
     try:
         frames.append(Image.open(frame_filename))
-        print(f"Processed year {year}")
+        print(f"Processed Season {season} (Year {year}, {season_type})")
     except Exception as e:
-        print(f"Error loading frame for year {year}: {e}")
+        print(f"Error loading frame for Season {season}: {e}")
 
-# ---------------------------
-# Create GIF from Frames
-# ---------------------------
+# ----------------------------------------
+# 5. Create the GIF
+# ----------------------------------------
 
 # Ensure that there are frames to save
 if frames:
@@ -177,7 +194,7 @@ if frames:
         save_all=True,
         append_images=frames[1:],
         duration=500,  # Duration between frames in milliseconds
-        loop=0
+        loop=0          # Loop indefinitely
     )
 
     print(f"GIF saved to {OUTPUT_GIF_PATH}")

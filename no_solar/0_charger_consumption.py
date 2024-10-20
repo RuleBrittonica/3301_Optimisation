@@ -91,7 +91,7 @@ for season in seasons:
 
     # Add the running total legend in the bottom right corner
     plt.text(
-        x=map_image.size[0] - 600,  # Position near the right edge
+        x=50,  # Position near the right edge
         y=map_image.size[1] - 100,  # Position near the bottom edge
         s=running_total_legend,
         fontsize=10,
@@ -109,20 +109,31 @@ for season in seasons:
     # Append the frame to the list of frames
     frames.append(Image.open(frame_filename))
 
+    # Append the frame to the list of frames
+    try:
+        frames.append(Image.open(frame_filename))
+        print(f"Processed Season {season} (Year {year_display}, {season_type})")
+    except Exception as e:
+        print(f"Error loading frame for Season {season}: {e}")
+
 # ----------------------------------------
 # 4. Create the GIF
 # ----------------------------------------
 
-# Define the output GIF path
-output_gif_path = 'power_consumption_growth.gif'
+# Ensure that there are frames to save
+if frames:
+    # Define the output GIF path
+    output_gif_path = 'power_consumption_growth.gif'
 
-# Save the frames as a GIF
-frames[0].save(
-    output_gif_path,
-    save_all=True,
-    append_images=frames[1:],
-    duration=500,  # Duration between frames in milliseconds
-    loop=0  # Loop indefinitely
-)
+    # Save the frames as a GIF
+    frames[0].save(
+        output_gif_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=500,  # Duration between frames in milliseconds
+        loop=0  # Loop indefinitely
+    )
 
-print(f"Power consumption GIF saved to {output_gif_path}")
+    print(f"GIF saved to {output_gif_path}")
+else:
+    print("No frames were created. GIF will not be generated.")

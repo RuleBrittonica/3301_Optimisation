@@ -147,7 +147,7 @@ for season in seasons:
 
     # Add the running total legend in the bottom right corner
     plt.text(
-        x=map_image.size[0] - 1100,  # Position near the right edge
+        x=50,  # Position near the right edge
         y=map_image.size[1] - 100,   # Position near the bottom edge
         s=running_total_legend,
         fontsize=10,

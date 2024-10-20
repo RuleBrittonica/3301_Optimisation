@@ -12,7 +12,6 @@ python -u "3_solar_generation.py" &
 # Copy the gifs to the output folder
 # Make sure the python scripts have finished running before copying the gifs
 wait $!
-wait $!
 
 rm -rf "output"
 mkdir "output"
@@ -25,5 +24,7 @@ cp "power_consumption_growth.gif" "output/power_consumption_growth.gif"
 cp "solar_generation_growth.gif" "output/solar_generation_growth.gif"
 
 wait $!
+
+sleep 1
 
 echo "All scripts have finished"
