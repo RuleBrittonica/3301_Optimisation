@@ -119,9 +119,9 @@ for season in range(seasons):
 
     # 3. Population-Based Proportionality Constraint for Charger Distribution
     for i, district in enumerate(districts):
-        min_chargers = (population_season[i] / total_population) * max_chargers_per_season * 0.5  # 50% of proportional share
-        min_chargers_int = int(np.ceil(min_chargers))
-        prob += chargers_added[district] >= min_chargers_int, f"MinChargers_{district}_Season_{season+1}"
+        chargers_this_season = lp.lpSum([chargers_added[district] for district in districts])
+        min_chargers = (population_season[i] / total_population) * chargers_this_season * 0.5  # 50% of proportional share
+        prob += chargers_added[district] >= min_chargers, f"MinChargers_{district}_Season_{season+1}"
 
     # 5. No District can receive more than 35% of the total chargers added
     for i, district in enumerate(districts):

@@ -151,20 +151,20 @@ for season in range(seasons):
 
     # 3. Population-Based Proportionality Constraint for Charger Distribution
     for i, district in enumerate(districts):
-        min_chargers = (population_season[i] / total_population) * max_chargers_per_season * 0.5  # 50% of proportional share
-        min_chargers_int = int(np.ceil(min_chargers))
-        prob += chargers_added[district] >= min_chargers_int, f"MinChargers_{district}_Season_{season+1}"
+        chargers_this_season = lp.lpSum([chargers_added[district] for district in districts])
+        min_chargers = (population_season[i] / total_population) * chargers_this_season * 0.5  # 50% of proportional share
+        prob += chargers_added[district] >= min_chargers, f"MinChargers_{district}_Season_{season+1}"
 
-    # 5. No District can receive more than 35% of the total chargers added
+    # 4. No District can receive more than 35% of the total chargers added
     for i, district in enumerate(districts):
         prob += chargers_added[district] <= 0.35 * total_chargers_added, f"MaxChargersPerDistrict_{district}_Season_{season+1}"
 
-    # 6. No District can go below its minimum power limit
+    # 5. No District can go below its minimum power limit
     for i, district in enumerate(districts):
         district_consumption = power_season[i] + ev_charger_power * (total_chargers_placed[district] + chargers_added[district])
         prob += district_consumption >= min_power_limits[i], f"MinPowerLimit_{district}_Season_{season+1}"
 
-    # 7. 'CBR East' receives at most 5% of the total chargers added
+    # 6. 'CBR East' receives at most 5% of the total chargers added
     prob += chargers_added['CBR East'] <= 0.05 * total_chargers_added, f"CBR_East_Max_5_Percent_Season_{season+1}"
 
     # Solve the Linear Programming Problem
